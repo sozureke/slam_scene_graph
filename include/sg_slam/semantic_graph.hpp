@@ -29,6 +29,7 @@ namespace sg_slam {
       void updateNodePosition(Vertex node, const std::pair<double, double>& new_coordinates);
       void processMapData(const nav_msgs::msg::OccupancyGrid::SharedPtr& map);
       void removeOldNodes(const std::pair<double, double>& robot_position, double max_radius);
+      void clusterNodes(double cluster_radius);
 
       const Graph& getGraph() const;
 

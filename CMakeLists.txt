@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.5)
 project(sg_slam)
 
+
+set(CMAKE_BUILD_TYPE Debug)
+add_compile_options(-g -O0)
+
 if(NOT CMAKE_C_STANDARD)
   set(CMAKE_C_STANDARD 99)
 endif()
@@ -18,6 +22,7 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(pcl_ros REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(Boost REQUIRED COMPONENTS graph)
 find_package(visualization_msgs REQUIRED)
@@ -32,7 +37,7 @@ add_library(${PROJECT_NAME}_core
   src/slam_subscriber.cpp
   src/joy_to_cmd_vel.cpp
 )
-target_link_libraries(${PROJECT_NAME}_core ${Boost_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_core ${Boost_LIBRARIES} ${PCL_LIBRARIES})
 ament_target_dependencies(${PROJECT_NAME}_core rclcpp std_msgs visualization_msgs sensor_msgs nav_msgs geometry_msgs Boost)
 
 # Создание исполняемого файла для semantic_graph_node
