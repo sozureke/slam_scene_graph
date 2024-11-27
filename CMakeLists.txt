@@ -32,15 +32,14 @@ include_directories(
   ${Boost_INCLUDE_DIRS}
 )
 
-# Создание библиотеки с общей логикой
 add_library(${PROJECT_NAME}_core
-  src/slam_subscriber.cpp
   src/joy_to_cmd_vel.cpp
 )
+
 target_link_libraries(${PROJECT_NAME}_core ${Boost_LIBRARIES} ${PCL_LIBRARIES})
 ament_target_dependencies(${PROJECT_NAME}_core rclcpp std_msgs visualization_msgs sensor_msgs nav_msgs geometry_msgs Boost)
 
-# Создание исполняемого файла для semantic_graph_node
+
 add_executable(semantic_graph_node_exec src/semantic_graph_node.cpp)
 target_link_libraries(semantic_graph_node_exec ${PROJECT_NAME}_core)
 ament_target_dependencies(semantic_graph_node_exec rclcpp std_msgs visualization_msgs sensor_msgs nav_msgs geometry_msgs Boost)

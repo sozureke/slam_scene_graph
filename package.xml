@@ -4,7 +4,7 @@
   <name>sg_slam</name>
   <version>0.0.1</version>
   <description>Semantic Graphs integration with LIO-Slam</description>
-  <maintainer email="sozuew.synergy@gmail.com">sozureke</maintainer>
+  <maintainer email="sozure.synergy@gmail.com">sozureke</maintainer>
   <license>Apache 2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
