@@ -45,19 +45,11 @@ def generate_launch_description():
 				]
 		)
 	
-	rviz_node = Node(
-				package='rviz2',
-				executable='rviz2',
-				name='rviz2',
-				output='screen',
-				arguments=['-d', os.path.join(pkg_slam_algorithm, 'config', 'rviz2.rviz')],
-				parameters=[{'use_sim_time': True}]
-		)
+
 	
 	return LaunchDescription([
 				max_radius_arg,
 				gazebo,
-				rviz_node,
 				semantic_graph_node,
 				slam
 		])

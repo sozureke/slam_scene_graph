@@ -1,39 +1,28 @@
 #include "sg_slam/cloud_handler.hpp"
-#include <pcl/filters/passthrough.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl_conversions/pcl_conversions.h>
+#include "rclcpp/rclcpp.hpp"
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 
 namespace sg_slam {
 
-CloudHandler::CloudHandler(SemanticGraph& graph, rclcpp::Node::SharedPtr node, double z_min, double z_max, double voxel_leaf_size, double cluster_radius)
-    : graph_(graph), z_min_(z_min), z_max_(z_max), voxel_leaf_size_(voxel_leaf_size), cluster_radius_(cluster_radius) {
-    subscription_ = node->create_subscription<sensor_msgs::msg::PointCloud2>(
-        "/lio_sam/mapping/cloud_registered", 10, std::bind(&CloudHandler::cloudCallback, this, std::placeholders::_1));
-}
+CloudHandler::CloudHandler(SemanticGraph& graph) : graph_(graph) {}
 
 void CloudHandler::cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::fromROSMsg(*msg, *cloud);
+    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Received cloud data.");
 
-    pcl::PassThrough<pcl::PointXYZ> pass;
-    pass.setInputCloud(cloud);
-    pass.setFilterFieldName("z");
-    pass.setFilterLimits(z_min_, z_max_);
-    pass.filter(*cloud);
+    sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x");
+    sensor_msgs::PointCloud2ConstIterator<float> iter_y(*msg, "y");
+    sensor_msgs::PointCloud2ConstIterator<float> iter_z(*msg, "z");
 
-    pcl::VoxelGrid<pcl::PointXYZ> voxel_grid;
-    voxel_grid.setInputCloud(cloud);
-    voxel_grid.setLeafSize(voxel_leaf_size_, voxel_leaf_size_, voxel_leaf_size_);
-    voxel_grid.filter(*cloud);
-
-    for (const auto& point : cloud->points) {
-        NodeProperties props;
-        props.coordinates = {point.x, point.y};
-        props.object_type = "PointCloud";
-        graph_.addNode(props);
+    for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
+        if (*iter_z > 0.0 && *iter_z < 5.0) {
+            NodeProperties props;
+            props.object_type = "PointCloud";
+            props.coordinates = {*iter_x, *iter_y};
+            graph_.addNode(props);
+        }
     }
-
-    graph_.clusterNodes(cluster_radius_);
+    graph_.clusterNodes(1.0); 
 }
 
-}  // namespace sg_slam
+} 

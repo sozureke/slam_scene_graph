@@ -5,6 +5,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <unordered_set>
 
 namespace sg_slam {
 
@@ -36,6 +37,6 @@ private:
     Graph graph_;
 };
 
-}
+} 
 
-#endif  
+#endif 

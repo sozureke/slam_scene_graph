@@ -35,16 +35,15 @@ include_directories(
 
 add_library(${PROJECT_NAME}_core
   src/joy_to_cmd_vel.cpp
+  src/semantic_graph_node.cpp
   src/semantic_graph.cpp
-  src/slam_handler.cpp
   src/cloud_handler.cpp
-  src/marker_publisher.cpp
 )
 target_link_libraries(${PROJECT_NAME}_core ${Boost_LIBRARIES} ${PCL_LIBRARIES})
 ament_target_dependencies(${PROJECT_NAME}_core rclcpp std_msgs sensor_msgs nav_msgs geometry_msgs Boost visualization_msgs)
 
 
-add_executable(semantic_graph_node_exec src/semantic_graph_node.cpp)
+add_executable(semantic_graph_node_exec src/main.cpp)
 target_link_libraries(semantic_graph_node_exec ${PROJECT_NAME}_core)
 ament_target_dependencies(semantic_graph_node_exec rclcpp std_msgs sensor_msgs nav_msgs geometry_msgs Boost visualization_msgs)
 
