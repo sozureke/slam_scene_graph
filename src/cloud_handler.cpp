@@ -1,11 +1,10 @@
 #include "sg_slam/cloud_handler.hpp"
-#include "rclcpp/rclcpp.hpp"
-#include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 
 namespace sg_slam {
 
-CloudHandler::CloudHandler(SemanticGraph& graph) : graph_(graph) {}
+CloudHandler::CloudHandler(SemanticGraph& graph, double& cluster_radius, int& min_points_per_cluster)
+    : graph_(graph), cluster_radius_(cluster_radius), min_points_per_cluster_(min_points_per_cluster) {}
 
 void CloudHandler::cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
     RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Received cloud data.");
@@ -22,7 +21,16 @@ void CloudHandler::cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr 
             graph_.addNode(props);
         }
     }
-    graph_.clusterNodes(1.0); 
+
+    graph_.clusterNodes(cluster_radius_, min_points_per_cluster_);
 }
 
-} 
+void CloudHandler::setClusterRadius(double radius) {
+    cluster_radius_ = radius;
+}
+
+void CloudHandler::setMinPointsPerCluster(int points) {
+    min_points_per_cluster_ = points;
+}
+
+}
