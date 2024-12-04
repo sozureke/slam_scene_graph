@@ -8,6 +8,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <memory>
+#include <mutex>
 
 namespace sg_slam {
 
@@ -26,8 +27,10 @@ private:
     int min_points_per_cluster_;
 
     std::shared_ptr<CloudHandler> cloud_handler_;
-    SemanticGraph semantic_graph_;  // Добавляем поле для графа
-    std::pair<double, double> robot_position_;  // Переменная для позиции робота
+    SemanticGraph semantic_graph_;
+    Position robot_position_;
+
+    std::mutex graph_mutex_;
 
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr slam_subscription_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_subscription_;
