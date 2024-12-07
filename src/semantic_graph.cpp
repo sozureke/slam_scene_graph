@@ -6,8 +6,9 @@
 #include <pcl/point_types.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/common/common.h>
-#include <Eigen/Core> 
+#include <Eigen/Core>
 #include <rclcpp/rclcpp.hpp>
+#include <visualization_msgs/msg/marker.hpp>
 
 namespace sg_slam {
 
@@ -98,6 +99,38 @@ void SemanticGraph::filterStableClusters(const std::vector<NodeProperties>& curr
 
 void SemanticGraph::publishStableClusters() {
     for (const auto& [id, cluster] : stable_clusters) {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "map";
+        marker.header.stamp = rclcpp::Clock().now();
+        marker.ns = "classified_objects";
+        marker.id = id;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.pose.position.x = cluster.coordinates.x;
+        marker.pose.position.y = cluster.coordinates.y;
+        marker.pose.position.z = cluster.coordinates.z;
+        marker.scale.x = 0.3;
+        marker.scale.y = 0.3;
+        marker.scale.z = 0.3;
+
+        if (cluster.object_type == "Wall") {
+            marker.color.r = 1.0;
+            marker.color.g = 0.0;
+            marker.color.b = 0.0;
+        } else if (cluster.object_type == "Door") {
+            marker.color.r = 0.0;
+            marker.color.g = 1.0;
+            marker.color.b = 0.0;
+        } else if (cluster.object_type == "Obstacle") {
+            marker.color.r = 0.0;
+            marker.color.g = 0.0;
+            marker.color.b = 1.0;
+        } else {
+            marker.color.r = 1.0;
+            marker.color.g = 1.0;
+            marker.color.b = 1.0;
+        }
+
+        marker.color.a = 1.0;
         addNode(cluster);
     }
 }
@@ -208,18 +241,34 @@ void SemanticGraph::clusterNodes(double cluster_radius, int min_points_per_clust
         NodeProperties cluster_properties;
         cluster_properties.object_type = "Cluster";
         cluster_properties.coordinates = Position{
-            (min_pt[0] + max_pt[0]) / 2, 
-            (min_pt[1] + max_pt[1]) / 2, 
+            (min_pt[0] + max_pt[0]) / 2,
+            (min_pt[1] + max_pt[1]) / 2,
             (min_pt[2] + max_pt[2]) / 2
         };
         cluster_properties.dimensions.width = max_pt[0] - min_pt[0];
         cluster_properties.dimensions.height = max_pt[1] - min_pt[1];
         cluster_properties.dimensions.length = max_pt[2] - min_pt[2];
 
+        cluster_properties.object_type = classifyObject(cluster_properties);
         addNode(cluster_properties);
     }
 }
 
+std::string SemanticGraph::classifyObject(const NodeProperties& cluster) {
+    const auto& dims = cluster.dimensions;
+
+    if (dims.height > 2.5 && dims.width < 0.5) {
+        return "Wall";
+    } else if (dims.height < 1.0 && dims.width < 1.0 && dims.length < 1.0) {
+        return "Obstacle";
+    } else if (dims.height > 2.0 && dims.width > 0.8 && dims.width < 1.2) {
+        return "Door";
+    }
+
+    return "Unknown";
+}
+
+} 
+
 sg_slam::ObjectDimensions::ObjectDimensions(double w, double h, double l)
     : width(w), height(h), length(l) {}
-}

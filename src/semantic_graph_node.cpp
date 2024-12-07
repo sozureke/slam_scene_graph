@@ -65,30 +65,45 @@ void SemanticGraphNode::publishGraphMarkers() {
     for (auto vertex : boost::make_iterator_range(boost::vertices(semantic_graph_.getGraph()))) {
         const auto& properties = semantic_graph_.getGraph()[vertex];
 
-        visualization_msgs::msg::Marker cluster_marker;
-        cluster_marker.header.frame_id = "map";
-        cluster_marker.header.stamp = this->now();
-        cluster_marker.ns = "clusters";
-        cluster_marker.id = id++;
-        cluster_marker.type = visualization_msgs::msg::Marker::SPHERE;
-        cluster_marker.action = visualization_msgs::msg::Marker::ADD;
+        visualization_msgs::msg::Marker object_marker;
+        object_marker.header.frame_id = "map";
+        object_marker.header.stamp = this->now();
+        object_marker.ns = "classified_objects";
+        object_marker.id = id++;
+        object_marker.type = visualization_msgs::msg::Marker::SPHERE;
+        object_marker.action = visualization_msgs::msg::Marker::ADD;
 
-        cluster_marker.pose.position.x = properties.coordinates.x;
-        cluster_marker.pose.position.y = properties.coordinates.y;
-        cluster_marker.pose.position.z = properties.coordinates.z;
+        object_marker.pose.position.x = properties.coordinates.x;
+        object_marker.pose.position.y = properties.coordinates.y;
+        object_marker.pose.position.z = properties.coordinates.z;
 
-        cluster_marker.scale.x = 0.3; 
-        cluster_marker.scale.y = 0.3;
-        cluster_marker.scale.z = 0.3;
-        cluster_marker.color.a = 1.0;
-        cluster_marker.color.r = 1.0;
-        cluster_marker.color.g = 0.0;
-        cluster_marker.color.b = 0.0;
+        object_marker.scale.x = 0.3; 
+        object_marker.scale.y = 0.3;
+        object_marker.scale.z = 0.3;
+        object_marker.color.a = 1.0;
 
-        marker_array.markers.push_back(cluster_marker);
+        if (properties.object_type == "Wall") {
+            object_marker.color.r = 1.0;
+            object_marker.color.g = 0.0;
+            object_marker.color.b = 0.0; 
+        } else if (properties.object_type == "Door") {
+            object_marker.color.r = 0.0;
+            object_marker.color.g = 1.0;
+            object_marker.color.b = 0.0; 
+        } else if (properties.object_type == "Obstacle") {
+            object_marker.color.r = 0.0;
+            object_marker.color.g = 0.0;
+            object_marker.color.b = 1.0; 
+        } else {
+            object_marker.color.r = 1.0;
+            object_marker.color.g = 1.0;
+            object_marker.color.b = 1.0; 
+        }
+
+        marker_array.markers.push_back(object_marker);
     }
 
     marker_publisher_->publish(marker_array);
-    RCLCPP_INFO(this->get_logger(), "Cluster markers published.");
+    RCLCPP_INFO(this->get_logger(), "Markers for classified objects published.");
 }
 } 

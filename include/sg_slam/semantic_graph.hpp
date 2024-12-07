@@ -46,6 +46,8 @@ public:
     void publishStableClusters(); 
     void adaptiveClusterNodes(double base_cluster_radius, int min_points_per_cluster);
     double calculatePointDensity(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const std::vector<int>& indices);
+    std::string classifyObject(const NodeProperties& cluster);
+
     void clearGraph();        
 
     const Graph& getGraph() const;
