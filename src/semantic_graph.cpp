@@ -5,6 +5,10 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/segmentation/extract_clusters.h>
+#include <pcl/common/common.h>
+#include <Eigen/Core> 
+#include <rclcpp/rclcpp.hpp>
+
 
 namespace sg_slam {
 
@@ -51,41 +55,78 @@ void SemanticGraph::removeOldNodes(const Position& robot_position, double max_ra
 
 void SemanticGraph::clusterNodes(double cluster_radius, int min_points_per_cluster) {
     if (boost::num_vertices(graph_) < 2) {
+        RCLCPP_WARN(rclcpp::get_logger("sg_slam"), "Not enough points to form clusters.");
         return;
     }
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     std::unordered_map<int, Vertex> vertex_map;
     int index = 0;
+
     for (auto vertex : boost::make_iterator_range(boost::vertices(graph_))) {
-        cloud->emplace_back(pcl::PointXYZ(graph_[vertex].coordinates.x, graph_[vertex].coordinates.y, graph_[vertex].coordinates.z));
+        cloud->push_back(pcl::PointXYZ(graph_[vertex].coordinates.x, graph_[vertex].coordinates.y, graph_[vertex].coordinates.z));
         vertex_map[index++] = vertex;
     }
 
+    if (cloud->empty()) {
+        RCLCPP_WARN(rclcpp::get_logger("sg_slam"), "Point cloud is empty, cannot perform clustering.");
+        return;
+    }
+
+    std::vector<Vertex> vertices_to_remove;
+    for (auto vp = boost::vertices(graph_); vp.first != vp.second; ++vp.first) {
+        vertices_to_remove.push_back(*vp.first);
+    }
+    for (auto it = vertices_to_remove.rbegin(); it != vertices_to_remove.rend(); ++it) {
+        boost::clear_vertex(*it, graph_);
+        boost::remove_vertex(*it, graph_);
+    }
+    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Cleared old graph.");
+
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
     tree->setInputCloud(cloud);
+
     pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-    ec.setClusterTolerance(cluster_radius);
+    ec.setClusterTolerance(cluster_radius);   
     ec.setMinClusterSize(min_points_per_cluster);
-    ec.setMaxClusterSize(cloud->size());
+    ec.setMaxClusterSize(cloud->size());       
     ec.setSearchMethod(tree);
 
     std::vector<pcl::PointIndices> cluster_indices;
     ec.setInputCloud(cloud);
     ec.extract(cluster_indices);
 
-    std::unordered_set<Vertex> to_remove;
+    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Found %zu clusters.", cluster_indices.size());
+
     for (const auto& cluster : cluster_indices) {
-        if (cluster.indices.size() < min_points_per_cluster) {
+        if (cluster.indices.size() < static_cast<size_t>(min_points_per_cluster)) {
             continue;
         }
-        for (const auto& idx : cluster.indices) {
-            to_remove.insert(vertex_map[idx]);
-        }
+
+        Eigen::Vector4f min_pt, max_pt;
+        pcl::getMinMax3D(*cloud, cluster.indices, min_pt, max_pt);
+
+
+        NodeProperties cluster_properties;
+        cluster_properties.object_type = "Cluster";
+        cluster_properties.coordinates = Position{
+            (min_pt[0] + max_pt[0]) / 2, 
+            (min_pt[1] + max_pt[1]) / 2, 
+            (min_pt[2] + max_pt[2]) / 2
+        };
+        cluster_properties.dimensions.width = max_pt[0] - min_pt[0];
+        cluster_properties.dimensions.height = max_pt[1] - min_pt[1];
+        cluster_properties.dimensions.length = max_pt[2] - min_pt[2];
+
+        addNode(cluster_properties);
     }
-    for (auto vertex : to_remove) {
-        boost::clear_vertex(vertex, graph_);
-        boost::remove_vertex(vertex, graph_);
-    }
-  }
-} 
+
+    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Clusters added to the graph successfully.");
+}
+
+
+
+sg_slam::ObjectDimensions::ObjectDimensions(double w, double h, double l)
+    : width(w), height(h), length(l) {}
+
+}  

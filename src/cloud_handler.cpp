@@ -1,4 +1,5 @@
 #include "sg_slam/cloud_handler.hpp"
+#include "sg_slam/semantic_graph.hpp"
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <rclcpp/rclcpp.hpp>
 
@@ -20,7 +21,9 @@ void CloudHandler::cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr 
             NodeProperties props;
             props.object_type = "PointCloud";
             props.coordinates = Position{*iter_x, *iter_y, *iter_z};
-            graph_.addNode(props);
+            
+            props.dimensions = ObjectDimensions(0.0, 0.0, 0.0);
+            graph_.addNode(NodeProperties{props});
             points_added++;
         }
     }

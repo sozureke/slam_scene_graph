@@ -11,20 +11,21 @@ struct Position {
     double x;
     double y;
     double z;
-};    
+};
+
+struct ObjectDimensions {
+    double width;
+    double height;
+    double length;
+
+    ObjectDimensions(double w = 0.0, double h = 0.0, double l = 0.0);
+};
 
 struct NodeProperties {
     std::string object_type;
     Position coordinates;
-    // std::pair<double, double> dimensions;
-    // std::string function;
-    // bool traversable;
-    // std::string access_status;
-    // int priority;
+    ObjectDimensions dimensions;
 };
-
-// using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, NodeProperties>;
-// using Vertex = boost::graph_traits<Graph>::vertex_descriptor;
 
 typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, NodeProperties> Graph;
 typedef boost::graph_traits<Graph>::vertex_descriptor Vertex;
@@ -39,7 +40,7 @@ public:
     void removeOldNodes(const Position& robot_position, double max_radius);
     void clusterNodes(double cluster_radius, int min_points_per_cluster);
 
-   const Graph& getGraph() const;
+    const Graph& getGraph() const;
 
 private:
     Graph graph_;

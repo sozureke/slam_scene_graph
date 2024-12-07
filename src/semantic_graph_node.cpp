@@ -8,8 +8,8 @@ namespace sg_slam {
 SemanticGraphNode::SemanticGraphNode()
     : Node("semantic_graph_node") {
     this->declare_parameter<double>("max_radius", 5.0);
-    this->declare_parameter<double>("cluster_radius", 1.0);
-    this->declare_parameter<int>("min_points_per_cluster", 10);
+    this->declare_parameter<double>("cluster_radius", 0.2);
+    this->declare_parameter<int>("min_points_per_cluster", 20);
     this->declare_parameter<int>("delay", 10);
 
     this->get_parameter("max_radius", max_radius_);
@@ -62,49 +62,35 @@ void SemanticGraphNode::publishGraphMarkers() {
     size_t vertex_count = boost::num_vertices(semantic_graph_.getGraph());
     RCLCPP_INFO(this->get_logger(), "Publishing markers for %zu vertices.", vertex_count);
 
+    // Добавляем маркеры только для кластеров
     for (auto vertex : boost::make_iterator_range(boost::vertices(semantic_graph_.getGraph()))) {
         const auto& properties = semantic_graph_.getGraph()[vertex];
 
-        RCLCPP_INFO(this->get_logger(), "Publishing marker for vertex %d at (%f, %f, %f)", vertex, 
-                    properties.coordinates.x, 
-                    properties.coordinates.y, 
-                    properties.coordinates.z);
+        // Маркер для центра кластера
+        visualization_msgs::msg::Marker cluster_marker;
+        cluster_marker.header.frame_id = "map";
+        cluster_marker.header.stamp = this->now();
+        cluster_marker.ns = "clusters";
+        cluster_marker.id = id++;
+        cluster_marker.type = visualization_msgs::msg::Marker::SPHERE;
+        cluster_marker.action = visualization_msgs::msg::Marker::ADD;
 
-        visualization_msgs::msg::Marker node_marker;
-        node_marker.header.frame_id = "map";
-        node_marker.header.stamp = this->now();
-        node_marker.ns = "nodes";
-        node_marker.id = id++;
-        node_marker.type = visualization_msgs::msg::Marker::SPHERE;
-        node_marker.action = visualization_msgs::msg::Marker::ADD;
+        cluster_marker.pose.position.x = properties.coordinates.x;
+        cluster_marker.pose.position.y = properties.coordinates.y;
+        cluster_marker.pose.position.z = properties.coordinates.z;
 
-        node_marker.pose.position.x = properties.coordinates.x;
-        node_marker.pose.position.y = properties.coordinates.y;
-        node_marker.pose.position.z = properties.coordinates.z;
+        cluster_marker.scale.x = 0.3; 
+        cluster_marker.scale.y = 0.3;
+        cluster_marker.scale.z = 0.3;
+        cluster_marker.color.a = 1.0;
+        cluster_marker.color.r = 1.0;
+        cluster_marker.color.g = 0.0;
+        cluster_marker.color.b = 0.0;
 
-        node_marker.scale.x = 0.15;
-        node_marker.scale.y = 0.15;
-        node_marker.scale.z = 0.15;
-        node_marker.color.a = 1.0;
-        node_marker.color.r = 0.0;
-        node_marker.color.g = 1.0;
-        node_marker.color.b = 0.0;
-
-        visualization_msgs::msg::Marker text_marker = node_marker;
-        text_marker.id = id++;
-        text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
-        text_marker.text = properties.object_type;
-        text_marker.pose.position.z += 0.3;
-        text_marker.scale.z = 0.2;
-        text_marker.color.r = 1.0;
-        text_marker.color.g = 1.0;
-        text_marker.color.b = 1.0;
-
-        marker_array.markers.push_back(node_marker);
-        marker_array.markers.push_back(text_marker);
+        marker_array.markers.push_back(cluster_marker);
     }
 
     marker_publisher_->publish(marker_array);
-    RCLCPP_INFO(this->get_logger(), "Markers published.");
+    RCLCPP_INFO(this->get_logger(), "Cluster markers published.");
 }
 } 
