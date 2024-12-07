@@ -4,6 +4,10 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <string>
 #include <cmath>
+#include <unordered_map>
+#include <vector>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h> // Добавлено для работы с PCL
 
 namespace sg_slam {
 
@@ -30,7 +34,6 @@ struct NodeProperties {
 typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, NodeProperties> Graph;
 typedef boost::graph_traits<Graph>::vertex_descriptor Vertex;
 
-
 class SemanticGraph {
 public:
     SemanticGraph();
@@ -39,13 +42,19 @@ public:
     void updateNodePosition(Vertex node, const Position& new_coordinates);
     void removeOldNodes(const Position& robot_position, double max_radius);
     void clusterNodes(double cluster_radius, int min_points_per_cluster);
+    void filterStableClusters(const std::vector<NodeProperties>& current_clusters);
+    void publishStableClusters(); 
+    void adaptiveClusterNodes(double base_cluster_radius, int min_points_per_cluster);
+    double calculatePointDensity(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const std::vector<int>& indices);
+    void clearGraph();        
 
     const Graph& getGraph() const;
 
 private:
+    std::unordered_map<int, NodeProperties> stable_clusters;
+    std::unordered_map<int, int> cluster_confirmations;
     Graph graph_;
 };
-
 } 
 
 #endif

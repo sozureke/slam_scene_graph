@@ -9,7 +9,6 @@
 #include <Eigen/Core> 
 #include <rclcpp/rclcpp.hpp>
 
-
 namespace sg_slam {
 
 SemanticGraph::SemanticGraph() {}
@@ -53,6 +52,113 @@ void SemanticGraph::removeOldNodes(const Position& robot_position, double max_ra
     }
 }
 
+void SemanticGraph::clearGraph() {
+    graph_.clear();
+}
+
+double SemanticGraph::calculatePointDensity(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const std::vector<int>& indices) {
+    if (indices.empty()) return 0.0;
+
+    Eigen::Vector4f min_pt, max_pt;
+    pcl::getMinMax3D(*cloud, indices, min_pt, max_pt);
+
+    double volume = (max_pt[0] - min_pt[0]) * (max_pt[1] - min_pt[1]) * (max_pt[2] - min_pt[2]);
+    if (volume <= 0.0) return 0.0;
+
+    return static_cast<double>(indices.size()) / volume;
+}
+
+void SemanticGraph::filterStableClusters(const std::vector<NodeProperties>& current_clusters) {
+    std::unordered_map<int, NodeProperties> updated_stable_clusters;
+
+    for (const auto& cluster : current_clusters) {
+        bool merged = false;
+        for (auto& [id, stable_cluster] : stable_clusters) {
+            double distance = std::sqrt(
+                std::pow(cluster.coordinates.x - stable_cluster.coordinates.x, 2) +
+                std::pow(cluster.coordinates.y - stable_cluster.coordinates.y, 2) +
+                std::pow(cluster.coordinates.z - stable_cluster.coordinates.z, 2));
+
+            if (distance < 0.5) {
+                stable_cluster.coordinates.x = (stable_cluster.coordinates.x + cluster.coordinates.x) / 2;
+                stable_cluster.coordinates.y = (stable_cluster.coordinates.y + cluster.coordinates.y) / 2;
+                stable_cluster.coordinates.z = (stable_cluster.coordinates.z + cluster.coordinates.z) / 2;
+                merged = true;
+                break;
+            }
+        }
+
+        if (!merged) {
+            updated_stable_clusters[updated_stable_clusters.size()] = cluster;
+        }
+    }
+
+    stable_clusters = std::move(updated_stable_clusters);
+}
+
+void SemanticGraph::publishStableClusters() {
+    for (const auto& [id, cluster] : stable_clusters) {
+        addNode(cluster);
+    }
+}
+
+void SemanticGraph::adaptiveClusterNodes(double base_cluster_radius, int min_points_per_cluster) {
+    if (boost::num_vertices(graph_) < 2) {
+        return;
+    }
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    std::unordered_map<int, Vertex> vertex_map;
+    int index = 0;
+
+    for (auto vertex : boost::make_iterator_range(boost::vertices(graph_))) {
+        cloud->push_back(pcl::PointXYZ(graph_[vertex].coordinates.x, graph_[vertex].coordinates.y, graph_[vertex].coordinates.z));
+        vertex_map[index++] = vertex;
+    }
+
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+    tree->setInputCloud(cloud);
+    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+    ec.setClusterTolerance(base_cluster_radius);
+    ec.setMinClusterSize(min_points_per_cluster);
+    ec.setMaxClusterSize(cloud->size());
+    ec.setSearchMethod(tree);
+
+    std::vector<pcl::PointIndices> cluster_indices;
+    ec.setInputCloud(cloud);
+    ec.extract(cluster_indices);
+
+    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Number of clusters found: %zu", cluster_indices.size());
+
+    std::vector<NodeProperties> new_clusters;
+
+    for (const auto& cluster : cluster_indices) {
+        if (cluster.indices.size() < static_cast<size_t>(min_points_per_cluster)) {
+            continue;
+        }
+
+        double density = calculatePointDensity(cloud, cluster.indices);
+        if (density < 0.1) {
+            continue;
+        }
+
+        Eigen::Vector4f min_pt, max_pt;
+        pcl::getMinMax3D(*cloud, cluster.indices, min_pt, max_pt);
+
+        NodeProperties cluster_properties;
+        cluster_properties.object_type = "Cluster";
+        cluster_properties.coordinates = Position{(min_pt[0] + max_pt[0]) / 2, (min_pt[1] + max_pt[1]) / 2, (min_pt[2] + max_pt[2]) / 2};
+        cluster_properties.dimensions.width = max_pt[0] - min_pt[0];
+        cluster_properties.dimensions.height = max_pt[1] - min_pt[1];
+        cluster_properties.dimensions.length = max_pt[2] - min_pt[2];
+
+        new_clusters.push_back(cluster_properties);
+    }
+
+    filterStableClusters(new_clusters);
+    publishStableClusters();
+}
+
 void SemanticGraph::clusterNodes(double cluster_radius, int min_points_per_cluster) {
     if (boost::num_vertices(graph_) < 2) {
         RCLCPP_WARN(rclcpp::get_logger("sg_slam"), "Not enough points to form clusters.");
@@ -73,23 +179,16 @@ void SemanticGraph::clusterNodes(double cluster_radius, int min_points_per_clust
         return;
     }
 
-    std::vector<Vertex> vertices_to_remove;
-    for (auto vp = boost::vertices(graph_); vp.first != vp.second; ++vp.first) {
-        vertices_to_remove.push_back(*vp.first);
-    }
-    for (auto it = vertices_to_remove.rbegin(); it != vertices_to_remove.rend(); ++it) {
-        boost::clear_vertex(*it, graph_);
-        boost::remove_vertex(*it, graph_);
-    }
+    graph_.clear();
     RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Cleared old graph.");
 
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
     tree->setInputCloud(cloud);
 
     pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-    ec.setClusterTolerance(cluster_radius);   
+    ec.setClusterTolerance(cluster_radius);
     ec.setMinClusterSize(min_points_per_cluster);
-    ec.setMaxClusterSize(cloud->size());       
+    ec.setMaxClusterSize(cloud->size());
     ec.setSearchMethod(tree);
 
     std::vector<pcl::PointIndices> cluster_indices;
@@ -106,7 +205,6 @@ void SemanticGraph::clusterNodes(double cluster_radius, int min_points_per_clust
         Eigen::Vector4f min_pt, max_pt;
         pcl::getMinMax3D(*cloud, cluster.indices, min_pt, max_pt);
 
-
         NodeProperties cluster_properties;
         cluster_properties.object_type = "Cluster";
         cluster_properties.coordinates = Position{
@@ -120,13 +218,8 @@ void SemanticGraph::clusterNodes(double cluster_radius, int min_points_per_clust
 
         addNode(cluster_properties);
     }
-
-    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Clusters added to the graph successfully.");
 }
-
-
 
 sg_slam::ObjectDimensions::ObjectDimensions(double w, double h, double l)
     : width(w), height(h), length(l) {}
-
-}  
+}

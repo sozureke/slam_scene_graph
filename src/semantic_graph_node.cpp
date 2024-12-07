@@ -8,7 +8,7 @@ namespace sg_slam {
 SemanticGraphNode::SemanticGraphNode()
     : Node("semantic_graph_node") {
     this->declare_parameter<double>("max_radius", 5.0);
-    this->declare_parameter<double>("cluster_radius", 0.2);
+    this->declare_parameter<double>("cluster_radius", 0.5);
     this->declare_parameter<int>("min_points_per_cluster", 20);
     this->declare_parameter<int>("delay", 10);
 
@@ -62,11 +62,9 @@ void SemanticGraphNode::publishGraphMarkers() {
     size_t vertex_count = boost::num_vertices(semantic_graph_.getGraph());
     RCLCPP_INFO(this->get_logger(), "Publishing markers for %zu vertices.", vertex_count);
 
-    // Добавляем маркеры только для кластеров
     for (auto vertex : boost::make_iterator_range(boost::vertices(semantic_graph_.getGraph()))) {
         const auto& properties = semantic_graph_.getGraph()[vertex];
 
-        // Маркер для центра кластера
         visualization_msgs::msg::Marker cluster_marker;
         cluster_marker.header.frame_id = "map";
         cluster_marker.header.stamp = this->now();
