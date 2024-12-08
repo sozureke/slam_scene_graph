@@ -38,6 +38,6 @@ private:
     rclcpp::TimerBase::SharedPtr timer_;
 };
 
-} // namespace sg_slam
+}
 
 #endif

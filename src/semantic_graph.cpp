@@ -28,9 +28,52 @@ void SemanticGraph::updateNodePosition(Vertex node, const Position& new_coordina
     graph_[node].coordinates = new_coordinates;
 }
 
+void SemanticGraph::addRelationship(Vertex node1, Vertex node2, const std::string& relation) {
+    auto [edge, success] = boost::add_edge(node1, node2, graph_);
+    if (success) {
+        graph_[edge].relation = relation;
+        RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Relationship added between vertices: %s", relation.c_str());
+    } else {
+        RCLCPP_WARN(rclcpp::get_logger("sg_slam"), "Failed to add relationship between vertices.");
+    }
+}
+
+
+
 const Graph& SemanticGraph::getGraph() const {
     return graph_;
 }
+
+
+void SemanticGraph::generateEdges() {
+    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Generating edges between graph vertices...");
+    for (auto vertex1 : boost::make_iterator_range(boost::vertices(graph_))) {
+        for (auto vertex2 : boost::make_iterator_range(boost::vertices(graph_))) {
+            if (vertex1 != vertex2) {
+                const auto& pos1 = graph_[vertex1].coordinates;
+                const auto& pos2 = graph_[vertex2].coordinates;
+
+                double distance = std::sqrt(
+                    std::pow(pos1.x - pos2.x, 2) +
+                    std::pow(pos1.y - pos2.y, 2) +
+                    std::pow(pos1.z - pos2.z, 2));
+
+                if (distance < 1.0) {
+                    addRelationship(vertex1, vertex2, "adjacency");
+                    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Added adjacency edge: Vertex1 (%f, %f, %f) -> Vertex2 (%f, %f, %f)",
+                                pos1.x, pos1.y, pos1.z, pos2.x, pos2.y, pos2.z);
+                } else if (graph_[vertex1].object_type == "Door" && 
+                           graph_[vertex2].object_type == "Wall") {
+                    addRelationship(vertex1, vertex2, "connection");
+                    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Added connection edge: Door (%f, %f, %f) -> Wall (%f, %f, %f)",
+                                pos1.x, pos1.y, pos1.z, pos2.x, pos2.y, pos2.z);
+                }
+            }
+        }
+    }
+}
+
+
 
 void SemanticGraph::removeOldNodes(const Position& robot_position, double max_radius) {
     double max_radius_squared = max_radius * max_radius;

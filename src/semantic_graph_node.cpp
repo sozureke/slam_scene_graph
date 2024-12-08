@@ -53,7 +53,6 @@ void SemanticGraphNode::publishGraphMarkers() {
     std::lock_guard<std::mutex> lock(graph_mutex_);
     visualization_msgs::msg::MarkerArray marker_array;
 
-    // Удаление всех предыдущих маркеров
     visualization_msgs::msg::Marker delete_marker;
     delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
     delete_marker.header.frame_id = "map";
@@ -61,6 +60,7 @@ void SemanticGraphNode::publishGraphMarkers() {
     marker_array.markers.push_back(delete_marker);
 
     int id = 0;
+
     for (auto vertex : boost::make_iterator_range(boost::vertices(semantic_graph_.getGraph()))) {
         const auto& properties = semantic_graph_.getGraph()[vertex];
 
@@ -70,7 +70,6 @@ void SemanticGraphNode::publishGraphMarkers() {
         object_marker.ns = "classified_objects";
         object_marker.id = id++;
         object_marker.type = visualization_msgs::msg::Marker::SPHERE;
-        object_marker.action = visualization_msgs::msg::Marker::ADD;
         object_marker.pose.position.x = properties.coordinates.x;
         object_marker.pose.position.y = properties.coordinates.y;
         object_marker.pose.position.z = properties.coordinates.z;
@@ -103,29 +102,68 @@ void SemanticGraphNode::publishGraphMarkers() {
         text_marker.header.frame_id = "map";
         text_marker.header.stamp = this->now();
         text_marker.ns = "classified_objects_text";
-        text_marker.id = id++;
+        text_marker.id = id + 1000;
         text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
-        text_marker.action = visualization_msgs::msg::Marker::ADD;
-
         text_marker.pose.position.x = properties.coordinates.x;
         text_marker.pose.position.y = properties.coordinates.y;
-        text_marker.pose.position.z = properties.coordinates.z + 0.5; 
-
-        text_marker.scale.z = 0.2; 
+        text_marker.pose.position.z = properties.coordinates.z + 0.5;
+        text_marker.scale.z = 0.15;
         text_marker.color.r = 1.0;
         text_marker.color.g = 1.0;
         text_marker.color.b = 1.0;
         text_marker.color.a = 1.0;
 
-        text_marker.text = "Type:" + properties.object_type + 
-                           "\nWidth:" + std::to_string(properties.dimensions.width) + 
-                           "\nHeight:" + std::to_string(properties.dimensions.height) + 
-                           "\nLength:" + std::to_string(properties.dimensions.length);
+        text_marker.text = "Type: " + properties.object_type +
+                           "\nWidth: " + std::to_string(properties.dimensions.width) +
+                           "\nHeight: " + std::to_string(properties.dimensions.height) +
+                           "\nLength: " + std::to_string(properties.dimensions.length);
 
         marker_array.markers.push_back(text_marker);
     }
 
+    for (auto edge : boost::make_iterator_range(boost::edges(semantic_graph_.getGraph()))) {
+        auto source = boost::source(edge, semantic_graph_.getGraph());
+        auto target = boost::target(edge, semantic_graph_.getGraph());
+
+        const auto& source_pos = semantic_graph_.getGraph()[source].coordinates;
+        const auto& target_pos = semantic_graph_.getGraph()[target].coordinates;
+
+        if (source_pos.x == 0.0 && source_pos.y == 0.0 && source_pos.z == 0.0 &&
+            target_pos.x == 0.0 && target_pos.y == 0.0 && target_pos.z == 0.0) {
+            continue;
+        }
+
+        visualization_msgs::msg::Marker edge_marker;
+        edge_marker.header.frame_id = "map";
+        edge_marker.header.stamp = this->now();
+        edge_marker.ns = "relationships";
+        edge_marker.id = id++;
+        edge_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
+        edge_marker.scale.x = 0.2;
+        edge_marker.color.r = 1.0; 
+        edge_marker.color.g = 0.0;
+        edge_marker.color.b = 0.0;
+        edge_marker.color.a = 1.0;
+
+        geometry_msgs::msg::Point p1;
+        p1.x = source_pos.x;
+        p1.y = source_pos.y;
+        p1.z = source_pos.z;
+
+        geometry_msgs::msg::Point p2;
+        p2.x = target_pos.x;
+        p2.y = target_pos.y;
+        p2.z = target_pos.z;
+
+        edge_marker.points.push_back(p1);
+        edge_marker.points.push_back(p2);
+
+        RCLCPP_INFO(this->get_logger(), "Edge: Source(%f, %f, %f) -> Target(%f, %f, %f)", 
+                    p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+
+        marker_array.markers.push_back(edge_marker);
+    }
+
     marker_publisher_->publish(marker_array);
-    RCLCPP_INFO(this->get_logger(), "Published %zu graph markers with semantic data.", marker_array.markers.size());
 }
-} 
+}
