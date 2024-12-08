@@ -6,7 +6,7 @@
 namespace sg_slam {
 
 SemanticGraphNode::SemanticGraphNode()
-    : Node("semantic_graph_node") {
+    : Node("semantic_graph_node") {    
     this->declare_parameter<double>("max_radius", 5.0);
     this->declare_parameter<double>("cluster_radius", 0.5);
     this->declare_parameter<int>("min_points_per_cluster", 20);
@@ -52,6 +52,8 @@ void SemanticGraphNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Share
 void SemanticGraphNode::publishGraphMarkers() {
     std::lock_guard<std::mutex> lock(graph_mutex_);
     visualization_msgs::msg::MarkerArray marker_array;
+
+    // Удаление всех предыдущих маркеров
     visualization_msgs::msg::Marker delete_marker;
     delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
     delete_marker.header.frame_id = "map";
@@ -59,9 +61,6 @@ void SemanticGraphNode::publishGraphMarkers() {
     marker_array.markers.push_back(delete_marker);
 
     int id = 0;
-    size_t vertex_count = boost::num_vertices(semantic_graph_.getGraph());
-    RCLCPP_INFO(this->get_logger(), "Publishing markers for %zu vertices.", vertex_count);
-
     for (auto vertex : boost::make_iterator_range(boost::vertices(semantic_graph_.getGraph()))) {
         const auto& properties = semantic_graph_.getGraph()[vertex];
 
@@ -72,12 +71,10 @@ void SemanticGraphNode::publishGraphMarkers() {
         object_marker.id = id++;
         object_marker.type = visualization_msgs::msg::Marker::SPHERE;
         object_marker.action = visualization_msgs::msg::Marker::ADD;
-
         object_marker.pose.position.x = properties.coordinates.x;
         object_marker.pose.position.y = properties.coordinates.y;
         object_marker.pose.position.z = properties.coordinates.z;
-
-        object_marker.scale.x = 0.3; 
+        object_marker.scale.x = 0.3;
         object_marker.scale.y = 0.3;
         object_marker.scale.z = 0.3;
         object_marker.color.a = 1.0;
@@ -85,25 +82,50 @@ void SemanticGraphNode::publishGraphMarkers() {
         if (properties.object_type == "Wall") {
             object_marker.color.r = 1.0;
             object_marker.color.g = 0.0;
-            object_marker.color.b = 0.0; 
+            object_marker.color.b = 0.0;
         } else if (properties.object_type == "Door") {
             object_marker.color.r = 0.0;
             object_marker.color.g = 1.0;
-            object_marker.color.b = 0.0; 
+            object_marker.color.b = 0.0;
         } else if (properties.object_type == "Obstacle") {
             object_marker.color.r = 0.0;
             object_marker.color.g = 0.0;
-            object_marker.color.b = 1.0; 
+            object_marker.color.b = 1.0;
         } else {
             object_marker.color.r = 1.0;
             object_marker.color.g = 1.0;
-            object_marker.color.b = 1.0; 
+            object_marker.color.b = 1.0;
         }
 
         marker_array.markers.push_back(object_marker);
+
+        visualization_msgs::msg::Marker text_marker;
+        text_marker.header.frame_id = "map";
+        text_marker.header.stamp = this->now();
+        text_marker.ns = "classified_objects_text";
+        text_marker.id = id++;
+        text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+        text_marker.action = visualization_msgs::msg::Marker::ADD;
+
+        text_marker.pose.position.x = properties.coordinates.x;
+        text_marker.pose.position.y = properties.coordinates.y;
+        text_marker.pose.position.z = properties.coordinates.z + 0.5; 
+
+        text_marker.scale.z = 0.2; 
+        text_marker.color.r = 1.0;
+        text_marker.color.g = 1.0;
+        text_marker.color.b = 1.0;
+        text_marker.color.a = 1.0;
+
+        text_marker.text = "Type:" + properties.object_type + 
+                           "\nWidth:" + std::to_string(properties.dimensions.width) + 
+                           "\nHeight:" + std::to_string(properties.dimensions.height) + 
+                           "\nLength:" + std::to_string(properties.dimensions.length);
+
+        marker_array.markers.push_back(text_marker);
     }
 
     marker_publisher_->publish(marker_array);
-    RCLCPP_INFO(this->get_logger(), "Markers for classified objects published.");
+    RCLCPP_INFO(this->get_logger(), "Published %zu graph markers with semantic data.", marker_array.markers.size());
 }
 } 

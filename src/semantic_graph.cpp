@@ -97,44 +97,6 @@ void SemanticGraph::filterStableClusters(const std::vector<NodeProperties>& curr
     stable_clusters = std::move(updated_stable_clusters);
 }
 
-void SemanticGraph::publishStableClusters() {
-    for (const auto& [id, cluster] : stable_clusters) {
-        visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = "map";
-        marker.header.stamp = rclcpp::Clock().now();
-        marker.ns = "classified_objects";
-        marker.id = id;
-        marker.type = visualization_msgs::msg::Marker::SPHERE;
-        marker.pose.position.x = cluster.coordinates.x;
-        marker.pose.position.y = cluster.coordinates.y;
-        marker.pose.position.z = cluster.coordinates.z;
-        marker.scale.x = 0.3;
-        marker.scale.y = 0.3;
-        marker.scale.z = 0.3;
-
-        if (cluster.object_type == "Wall") {
-            marker.color.r = 1.0;
-            marker.color.g = 0.0;
-            marker.color.b = 0.0;
-        } else if (cluster.object_type == "Door") {
-            marker.color.r = 0.0;
-            marker.color.g = 1.0;
-            marker.color.b = 0.0;
-        } else if (cluster.object_type == "Obstacle") {
-            marker.color.r = 0.0;
-            marker.color.g = 0.0;
-            marker.color.b = 1.0;
-        } else {
-            marker.color.r = 1.0;
-            marker.color.g = 1.0;
-            marker.color.b = 1.0;
-        }
-
-        marker.color.a = 1.0;
-        addNode(cluster);
-    }
-}
-
 void SemanticGraph::adaptiveClusterNodes(double base_cluster_radius, int min_points_per_cluster) {
     if (boost::num_vertices(graph_) < 2) {
         return;
@@ -189,7 +151,6 @@ void SemanticGraph::adaptiveClusterNodes(double base_cluster_radius, int min_poi
     }
 
     filterStableClusters(new_clusters);
-    publishStableClusters();
 }
 
 void SemanticGraph::clusterNodes(double cluster_radius, int min_points_per_cluster) {
