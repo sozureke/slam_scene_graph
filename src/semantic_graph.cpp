@@ -38,42 +38,63 @@ void SemanticGraph::addRelationship(Vertex node1, Vertex node2, const std::strin
     }
 }
 
-
-
 const Graph& SemanticGraph::getGraph() const {
     return graph_;
 }
 
+Eigen::Vector3d SemanticGraph::calculateCentroid(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const std::vector<int>& indices) const {
+    Eigen::Vector3d centroid(0.0, 0.0, 0.0);
+    for (const auto& idx : indices) {
+        const auto& point = cloud->points[idx];
+        centroid += Eigen::Vector3d(point.x, point.y, point.z);
+    }
+    centroid /= indices.size();
+    return centroid;
+}
+
+Eigen::Matrix3d SemanticGraph::calculateOrientation(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const std::vector<int>& indices) const {
+    Eigen::MatrixXd data(indices.size(), 3);
+    for (size_t i = 0; i < indices.size(); ++i) {
+        const auto& point = cloud->points[indices[i]];
+        data.row(i) << point.x, point.y, point.z;
+    }
+
+    Eigen::Vector3d mean = data.colwise().mean();
+    Eigen::MatrixXd centered = data.rowwise() - mean.transpose();
+    Eigen::Matrix3d covariance = (centered.adjoint() * centered) / double(indices.size() - 1);
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(covariance);
+    
+    return solver.eigenvectors();
+}
 
 void SemanticGraph::generateEdges() {
-    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Generating edges between graph vertices...");
     for (auto vertex1 : boost::make_iterator_range(boost::vertices(graph_))) {
+        const auto& node1 = graph_[vertex1];
+        Eigen::Vector3d pos1(node1.coordinates.x, node1.coordinates.y, node1.coordinates.z);
+
         for (auto vertex2 : boost::make_iterator_range(boost::vertices(graph_))) {
-            if (vertex1 != vertex2) {
-                const auto& pos1 = graph_[vertex1].coordinates;
-                const auto& pos2 = graph_[vertex2].coordinates;
+            if (vertex1 == vertex2) continue;
 
-                double distance = std::sqrt(
-                    std::pow(pos1.x - pos2.x, 2) +
-                    std::pow(pos1.y - pos2.y, 2) +
-                    std::pow(pos1.z - pos2.z, 2));
+            const auto& node2 = graph_[vertex2];
+            Eigen::Vector3d pos2(node2.coordinates.x, node2.coordinates.y, node2.coordinates.z);
 
-                if (distance < 1.0) {
-                    addRelationship(vertex1, vertex2, "adjacency");
-                    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Added adjacency edge: Vertex1 (%f, %f, %f) -> Vertex2 (%f, %f, %f)",
-                                pos1.x, pos1.y, pos1.z, pos2.x, pos2.y, pos2.z);
-                } else if (graph_[vertex1].object_type == "Door" && 
-                           graph_[vertex2].object_type == "Wall") {
-                    addRelationship(vertex1, vertex2, "connection");
-                    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Added connection edge: Door (%f, %f, %f) -> Wall (%f, %f, %f)",
-                                pos1.x, pos1.y, pos1.z, pos2.x, pos2.y, pos2.z);
-                }
+            double distance = calculateDistance(pos1, pos2);
+
+            if (distance < 2.0) {
+                addRelationship(vertex1, vertex2, "proximity");
+            } else if (node1.object_type == "Wall" && node2.object_type == "Wall" && distance < 3.0) {
+                addRelationship(vertex1, vertex2, "adjacent");
+            } else if ((node1.object_type == "Door" && node2.object_type == "Wall") && distance < 1.5) {
+                addRelationship(vertex1, vertex2, "attached");
             }
         }
     }
 }
 
 
+double SemanticGraph::calculateDistance(const Eigen::Vector3d& pos1, const Eigen::Vector3d& pos2) const {
+    return (pos1 - pos2).norm();
+}
 
 void SemanticGraph::removeOldNodes(const Position& robot_position, double max_radius) {
     double max_radius_squared = max_radius * max_radius;
@@ -165,9 +186,6 @@ void SemanticGraph::adaptiveClusterNodes(double base_cluster_radius, int min_poi
     std::vector<pcl::PointIndices> cluster_indices;
     ec.setInputCloud(cloud);
     ec.extract(cluster_indices);
-
-    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Number of clusters found: %zu", cluster_indices.size());
-
     std::vector<NodeProperties> new_clusters;
 
     for (const auto& cluster : cluster_indices) {
@@ -198,7 +216,6 @@ void SemanticGraph::adaptiveClusterNodes(double base_cluster_radius, int min_poi
 
 void SemanticGraph::clusterNodes(double cluster_radius, int min_points_per_cluster) {
     if (boost::num_vertices(graph_) < 2) {
-        RCLCPP_WARN(rclcpp::get_logger("sg_slam"), "Not enough points to form clusters.");
         return;
     }
 
@@ -212,12 +229,11 @@ void SemanticGraph::clusterNodes(double cluster_radius, int min_points_per_clust
     }
 
     if (cloud->empty()) {
-        RCLCPP_WARN(rclcpp::get_logger("sg_slam"), "Point cloud is empty, cannot perform clustering.");
         return;
     }
 
     graph_.clear();
-    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Cleared old graph.");
+
 
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
     tree->setInputCloud(cloud);

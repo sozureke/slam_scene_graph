@@ -41,7 +41,6 @@ typedef boost::graph_traits<Graph>::edge_descriptor Edge;
 class SemanticGraph {
 public:
     SemanticGraph();
-    Vertex addNode(const NodeProperties& properties);
     void addEdge(Vertex node1, Vertex node2);
     void addRelationship(Vertex node1, Vertex node2, const std::string& relation);
     void updateNodePosition(Vertex node, const Position& new_coordinates);
@@ -50,9 +49,16 @@ public:
     void filterStableClusters(const std::vector<NodeProperties>& current_clusters);
     void adaptiveClusterNodes(double base_cluster_radius, int min_points_per_cluster);
     void generateEdges();
-    double calculatePointDensity(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const std::vector<int>& indices);
-    std::string classifyObject(const NodeProperties& cluster);
     void clearGraph();
+
+    Vertex addNode(const NodeProperties& properties);
+    double calculateDistance(const Eigen::Vector3d& pos1, const Eigen::Vector3d& pos2)const;
+    double calculatePointDensity(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const 
+    std::vector<int>& indices);
+    Eigen::Vector3d calculateCentroid(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const std::vector<int>& indices) const;
+    Eigen::Matrix3d calculateOrientation(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const std::vector<int>& indices) const;
+
+    std::string classifyObject(const NodeProperties& cluster);
     const Graph& getGraph() const;
 
 private:

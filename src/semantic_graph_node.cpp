@@ -7,9 +7,9 @@ namespace sg_slam {
 
 SemanticGraphNode::SemanticGraphNode()
     : Node("semantic_graph_node") {    
-    this->declare_parameter<double>("max_radius", 5.0);
-    this->declare_parameter<double>("cluster_radius", 0.5);
-    this->declare_parameter<int>("min_points_per_cluster", 20);
+    this->declare_parameter<double>("max_radius", 7.0);
+    this->declare_parameter<double>("cluster_radius", 0.6);
+    this->declare_parameter<int>("min_points_per_cluster", 15);
     this->declare_parameter<int>("delay", 10);
 
     this->get_parameter("max_radius", max_radius_);
@@ -30,9 +30,6 @@ SemanticGraphNode::SemanticGraphNode()
     timer_ = this->create_wall_timer(
         std::chrono::seconds(delay_),
         std::bind(&SemanticGraphNode::publishGraphMarkers, this));
-
-    RCLCPP_INFO(this->get_logger(), "SemanticGraphNode initialized with max_radius: %f, cluster_radius: %f, min_points_per_cluster: %d",
-                max_radius_, cluster_radius_, min_points_per_cluster_);
 }
 
 void SemanticGraphNode::slamCallback(const geometry_msgs::msg::Pose::SharedPtr msg) {
@@ -122,48 +119,53 @@ void SemanticGraphNode::publishGraphMarkers() {
     }
 
     for (auto edge : boost::make_iterator_range(boost::edges(semantic_graph_.getGraph()))) {
-        auto source = boost::source(edge, semantic_graph_.getGraph());
-        auto target = boost::target(edge, semantic_graph_.getGraph());
+    auto source = boost::source(edge, semantic_graph_.getGraph());
+    auto target = boost::target(edge, semantic_graph_.getGraph());
 
-        const auto& source_pos = semantic_graph_.getGraph()[source].coordinates;
-        const auto& target_pos = semantic_graph_.getGraph()[target].coordinates;
+    const auto& source_pos = semantic_graph_.getGraph()[source].coordinates;
+    const auto& target_pos = semantic_graph_.getGraph()[target].coordinates;
+    const auto& relation = semantic_graph_.getGraph()[edge].relation;
 
-        if (source_pos.x == 0.0 && source_pos.y == 0.0 && source_pos.z == 0.0 &&
-            target_pos.x == 0.0 && target_pos.y == 0.0 && target_pos.z == 0.0) {
-            continue;
-        }
+    visualization_msgs::msg::Marker edge_marker;
+    edge_marker.header.frame_id = "map";
+    edge_marker.header.stamp = this->now();
+    edge_marker.ns = "relationships";
+    edge_marker.id = id++;
+    edge_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
+    edge_marker.scale.x = 0.05;
 
-        visualization_msgs::msg::Marker edge_marker;
-        edge_marker.header.frame_id = "map";
-        edge_marker.header.stamp = this->now();
-        edge_marker.ns = "relationships";
-        edge_marker.id = id++;
-        edge_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
-        edge_marker.scale.x = 0.2;
-        edge_marker.color.r = 1.0; 
+    if (relation == "parallel") {
+        edge_marker.color.r = 0.0;
+        edge_marker.color.g = 1.0;
+        edge_marker.color.b = 0.0; 
+    } else if (relation == "perpendicular") {
+        edge_marker.color.r = 0.0;
         edge_marker.color.g = 0.0;
-        edge_marker.color.b = 0.0;
-        edge_marker.color.a = 1.0;
-
-        geometry_msgs::msg::Point p1;
-        p1.x = source_pos.x;
-        p1.y = source_pos.y;
-        p1.z = source_pos.z;
-
-        geometry_msgs::msg::Point p2;
-        p2.x = target_pos.x;
-        p2.y = target_pos.y;
-        p2.z = target_pos.z;
-
-        edge_marker.points.push_back(p1);
-        edge_marker.points.push_back(p2);
-
-        RCLCPP_INFO(this->get_logger(), "Edge: Source(%f, %f, %f) -> Target(%f, %f, %f)", 
-                    p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
-
-        marker_array.markers.push_back(edge_marker);
+        edge_marker.color.b = 1.0; 
+    } else if (relation == "attached") {
+        edge_marker.color.r = 1.0;
+        edge_marker.color.g = 0.5;
+        edge_marker.color.b = 0.0; 
     }
 
+    edge_marker.color.a = 1.0;
+
+    geometry_msgs::msg::Point p1, p2;
+    p1.x = source_pos.x;
+    p1.y = source_pos.y;
+    p1.z = source_pos.z;
+    p2.x = target_pos.x;
+    p2.y = target_pos.y;
+    p2.z = target_pos.z;
+
+    edge_marker.points.push_back(p1);
+    edge_marker.points.push_back(p2);
+
+    RCLCPP_INFO(this->get_logger(), "Publishing edge marker: Source (%f, %f, %f) -> Target (%f, %f, %f)",
+                p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+
+    marker_array.markers.push_back(edge_marker);
+}
     marker_publisher_->publish(marker_array);
 }
 }

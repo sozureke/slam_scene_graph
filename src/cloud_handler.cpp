@@ -9,8 +9,6 @@ CloudHandler::CloudHandler(SemanticGraph& graph, double cluster_radius, int min_
     : graph_(graph), cluster_radius_(cluster_radius), min_points_per_cluster_(min_points_per_cluster), graph_mutex_(graph_mutex) {}
 
 void CloudHandler::cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
-    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Received cloud data.");
-
     sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x");
     sensor_msgs::PointCloud2ConstIterator<float> iter_y(*msg, "y");
     sensor_msgs::PointCloud2ConstIterator<float> iter_z(*msg, "z");
@@ -28,8 +26,8 @@ void CloudHandler::cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr 
         }
     }
 
-    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Added %zu points to the graph.", points_added);
     graph_.clusterNodes(cluster_radius_, min_points_per_cluster_);
+    graph_.generateEdges();
 }
 
 void CloudHandler::setClusterRadius(double radius) {
