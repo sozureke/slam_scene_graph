@@ -134,11 +134,11 @@ void SemanticGraphNode::publishGraphMarkers() {
     edge_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
     edge_marker.scale.x = 0.05;
 
-    if (relation == "parallel") {
+    if (relation == "proximity") {
         edge_marker.color.r = 0.0;
         edge_marker.color.g = 1.0;
         edge_marker.color.b = 0.0; 
-    } else if (relation == "perpendicular") {
+    } else if (relation == "adjacent") {
         edge_marker.color.r = 0.0;
         edge_marker.color.g = 0.0;
         edge_marker.color.b = 1.0; 
@@ -160,10 +160,6 @@ void SemanticGraphNode::publishGraphMarkers() {
 
     edge_marker.points.push_back(p1);
     edge_marker.points.push_back(p2);
-
-    RCLCPP_INFO(this->get_logger(), "Publishing edge marker: Source (%f, %f, %f) -> Target (%f, %f, %f)",
-                p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
-
     marker_array.markers.push_back(edge_marker);
 }
     marker_publisher_->publish(marker_array);

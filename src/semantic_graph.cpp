@@ -68,9 +68,14 @@ Eigen::Matrix3d SemanticGraph::calculateOrientation(const pcl::PointCloud<pcl::P
 }
 
 void SemanticGraph::generateEdges() {
+    double max_connection_distance = 10.0;
+
     for (auto vertex1 : boost::make_iterator_range(boost::vertices(graph_))) {
         const auto& node1 = graph_[vertex1];
         Eigen::Vector3d pos1(node1.coordinates.x, node1.coordinates.y, node1.coordinates.z);
+
+        Vertex closest_vertex = boost::graph_traits<Graph>::null_vertex();
+        double min_distance = std::numeric_limits<double>::max();
 
         for (auto vertex2 : boost::make_iterator_range(boost::vertices(graph_))) {
             if (vertex1 == vertex2) continue;
@@ -80,17 +85,35 @@ void SemanticGraph::generateEdges() {
 
             double distance = calculateDistance(pos1, pos2);
 
-            if (distance < 2.0) {
+            if (distance > max_connection_distance) continue;
+
+            double dynamic_threshold = std::min(
+                std::max({
+                    node1.dimensions.width, node1.dimensions.height, node1.dimensions.length,
+                    node2.dimensions.width, node2.dimensions.height, node2.dimensions.length
+                }) * 2.0, max_connection_distance);
+
+            if (distance < dynamic_threshold) {
                 addRelationship(vertex1, vertex2, "proximity");
-            } else if (node1.object_type == "Wall" && node2.object_type == "Wall" && distance < 3.0) {
+            }
+            if (node1.object_type == "Wall" && node2.object_type == "Wall" && distance < dynamic_threshold * 1.5) {
                 addRelationship(vertex1, vertex2, "adjacent");
-            } else if ((node1.object_type == "Door" && node2.object_type == "Wall") && distance < 1.5) {
+            }
+            if ((node1.object_type == "Door" && node2.object_type == "Wall") && distance < dynamic_threshold) {
                 addRelationship(vertex1, vertex2, "attached");
             }
+
+            if (distance < min_distance) {
+                min_distance = distance;
+                closest_vertex = vertex2;
+            }
+        }
+
+        if (closest_vertex != boost::graph_traits<Graph>::null_vertex() && min_distance < max_connection_distance) {
+            addRelationship(vertex1, closest_vertex, "nearest");
         }
     }
 }
-
 
 double SemanticGraph::calculateDistance(const Eigen::Vector3d& pos1, const Eigen::Vector3d& pos2) const {
     return (pos1 - pos2).norm();
