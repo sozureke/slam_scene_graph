@@ -69,48 +69,88 @@ Eigen::Matrix3d SemanticGraph::calculateOrientation(const pcl::PointCloud<pcl::P
 
 void SemanticGraph::generateEdges() {
     double max_connection_distance = 10.0;
+    double proximity_weight_base = 1.0;
+    double adjacent_weight_base = 1.5;
+    double attached_weight_base = 2.0;
+    double parallel_weight_base = 2.5;
+    double perpendicular_weight_base = 3.0;
+    double close_weight_base = 3.5;
+    double scale_factor_base = 1.5;
 
-    for (auto vertex1 : boost::make_iterator_range(boost::vertices(graph_))) {
-        const auto& node1 = graph_[vertex1];
-        Eigen::Vector3d pos1(node1.coordinates.x, node1.coordinates.y, node1.coordinates.z);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    std::unordered_map<int, Vertex> vertex_map;
+    int index = 0;
 
-        Vertex closest_vertex = boost::graph_traits<Graph>::null_vertex();
-        double min_distance = std::numeric_limits<double>::max();
+    for (auto vertex : boost::make_iterator_range(boost::vertices(graph_))) {
+        const auto& node = graph_[vertex];
+        cloud->push_back(pcl::PointXYZ(node.coordinates.x, node.coordinates.y, node.coordinates.z));
+        vertex_map[index++] = vertex;
+    }
 
-        for (auto vertex2 : boost::make_iterator_range(boost::vertices(graph_))) {
-            if (vertex1 == vertex2) continue;
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    kdtree.setInputCloud(cloud);
 
-            const auto& node2 = graph_[vertex2];
-            Eigen::Vector3d pos2(node2.coordinates.x, node2.coordinates.y, node2.coordinates.z);
+    for (size_t i = 0; i < cloud->size(); ++i) {
+        std::vector<int> pointIdxRadiusSearch;
+        std::vector<float> pointRadiusSquaredDistance;
 
-            double distance = calculateDistance(pos1, pos2);
+        pcl::PointXYZ searchPoint = cloud->points[i];
 
-            if (distance > max_connection_distance) continue;
+        if (kdtree.radiusSearch(searchPoint, max_connection_distance, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0) {
+            for (size_t j = 0; j < pointIdxRadiusSearch.size(); ++j) {
+                if (i == pointIdxRadiusSearch[j]) continue;
 
-            double dynamic_threshold = std::min(
-                std::max({
+                auto vertex1 = vertex_map[i];
+                auto vertex2 = vertex_map[pointIdxRadiusSearch[j]];
+
+                const auto& node1 = graph_[vertex1];
+                const auto& node2 = graph_[vertex2];
+
+                double distance = std::sqrt(pointRadiusSquaredDistance[j]);
+
+                double max_dimension = std::max({
                     node1.dimensions.width, node1.dimensions.height, node1.dimensions.length,
                     node2.dimensions.width, node2.dimensions.height, node2.dimensions.length
-                }) * 2.0, max_connection_distance);
+                });
 
-            if (distance < dynamic_threshold) {
-                addRelationship(vertex1, vertex2, "proximity");
-            }
-            if (node1.object_type == "Wall" && node2.object_type == "Wall" && distance < dynamic_threshold * 1.5) {
-                addRelationship(vertex1, vertex2, "adjacent");
-            }
-            if ((node1.object_type == "Door" && node2.object_type == "Wall") && distance < dynamic_threshold) {
-                addRelationship(vertex1, vertex2, "attached");
-            }
+                double dynamic_threshold = std::max(1.0, std::min(max_dimension * scale_factor_base, max_connection_distance));
 
-            if (distance < min_distance) {
-                min_distance = distance;
-                closest_vertex = vertex2;
-            }
-        }
+                if (distance < dynamic_threshold) {
+                    double weight = proximity_weight_base / distance;
+                    addRelationship(vertex1, vertex2, "proximity (" + std::to_string(weight) + ")");
+                }
 
-        if (closest_vertex != boost::graph_traits<Graph>::null_vertex() && min_distance < max_connection_distance) {
-            addRelationship(vertex1, closest_vertex, "nearest");
+                if ((node1.object_type == "Wall" || node1.object_type == "Unknown") &&
+                    (node2.object_type == "Wall" || node2.object_type == "Unknown") &&
+                    distance < dynamic_threshold * 1.5) {
+                    double weight = adjacent_weight_base / distance;
+                    addRelationship(vertex1, vertex2, "adjacent (" + std::to_string(weight) + ")");
+                }
+
+                if ((node1.object_type == "Door" && node2.object_type == "Wall") && distance < dynamic_threshold) {
+                    double weight = attached_weight_base / distance;
+                    addRelationship(vertex1, vertex2, "attached (" + std::to_string(weight) + ")");
+                }
+
+                if (std::abs(distance - max_dimension) < 1.0) {
+                    double weight = close_weight_base / distance;
+                    addRelationship(vertex1, vertex2, "close (" + std::to_string(weight) + ")");
+                }
+
+                Eigen::Vector3d dir1 = Eigen::Vector3d(node1.dimensions.width, node1.dimensions.height, node1.dimensions.length).normalized();
+                Eigen::Vector3d dir2 = Eigen::Vector3d(node2.dimensions.width, node2.dimensions.height, node2.dimensions.length).normalized();
+                double dot_product = dir1.dot(dir2);
+
+                if (std::abs(dot_product - 1.0) < 0.1) {
+                    double weight = parallel_weight_base / distance;
+                    addRelationship(vertex1, vertex2, "parallel (" + std::to_string(weight) + ")");
+                }
+
+                if (std::abs(dot_product) < 0.1) {
+                    double weight = perpendicular_weight_base / distance;
+                    addRelationship(vertex1, vertex2, "perpendicular (" + std::to_string(weight) + ")");
+                }
+            }
         }
     }
 }
@@ -270,8 +310,6 @@ void SemanticGraph::clusterNodes(double cluster_radius, int min_points_per_clust
     std::vector<pcl::PointIndices> cluster_indices;
     ec.setInputCloud(cloud);
     ec.extract(cluster_indices);
-
-    RCLCPP_INFO(rclcpp::get_logger("sg_slam"), "Found %zu clusters.", cluster_indices.size());
 
     for (const auto& cluster : cluster_indices) {
         if (cluster.indices.size() < static_cast<size_t>(min_points_per_cluster)) {

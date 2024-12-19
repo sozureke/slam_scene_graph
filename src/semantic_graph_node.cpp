@@ -119,49 +119,72 @@ void SemanticGraphNode::publishGraphMarkers() {
     }
 
     for (auto edge : boost::make_iterator_range(boost::edges(semantic_graph_.getGraph()))) {
-    auto source = boost::source(edge, semantic_graph_.getGraph());
-    auto target = boost::target(edge, semantic_graph_.getGraph());
+        auto source = boost::source(edge, semantic_graph_.getGraph());
+        auto target = boost::target(edge, semantic_graph_.getGraph());
 
-    const auto& source_pos = semantic_graph_.getGraph()[source].coordinates;
-    const auto& target_pos = semantic_graph_.getGraph()[target].coordinates;
-    const auto& relation = semantic_graph_.getGraph()[edge].relation;
+        const auto& source_pos = semantic_graph_.getGraph()[source].coordinates;
+        const auto& target_pos = semantic_graph_.getGraph()[target].coordinates;
+        const auto& relation = semantic_graph_.getGraph()[edge].relation;
 
-    visualization_msgs::msg::Marker edge_marker;
-    edge_marker.header.frame_id = "map";
-    edge_marker.header.stamp = this->now();
-    edge_marker.ns = "relationships";
-    edge_marker.id = id++;
-    edge_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
-    edge_marker.scale.x = 0.05;
+        double distance = semantic_graph_.calculateDistance(
+            Eigen::Vector3d(source_pos.x, source_pos.y, source_pos.z),
+            Eigen::Vector3d(target_pos.x, target_pos.y, target_pos.z));
 
-    if (relation == "proximity") {
-        edge_marker.color.r = 0.0;
-        edge_marker.color.g = 1.0;
-        edge_marker.color.b = 0.0; 
-    } else if (relation == "adjacent") {
-        edge_marker.color.r = 0.0;
-        edge_marker.color.g = 0.0;
-        edge_marker.color.b = 1.0; 
-    } else if (relation == "attached") {
-        edge_marker.color.r = 1.0;
-        edge_marker.color.g = 0.5;
-        edge_marker.color.b = 0.0; 
+        visualization_msgs::msg::Marker edge_marker;
+        edge_marker.header.frame_id = "map";
+        edge_marker.header.stamp = this->now();
+        edge_marker.ns = "relationships";
+        edge_marker.id = id++;
+        edge_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
+        edge_marker.scale.x = 0.1 / (distance + 0.1);
+
+
+        if (relation.find("proximity") != std::string::npos) {
+            edge_marker.color.r = 0.0;
+            edge_marker.color.g = 1.0;
+            edge_marker.color.b = 0.0;
+        } else if (relation.find("adjacent") != std::string::npos) {
+            edge_marker.color.r = 0.0;
+            edge_marker.color.g = 0.0;
+            edge_marker.color.b = 1.0;
+        } else if (relation.find("attached") != std::string::npos) {
+            edge_marker.color.r = 1.0;
+            edge_marker.color.g = 1.0;
+            edge_marker.color.b = 0.0;
+        } else if (relation.find("close") != std::string::npos) {
+            edge_marker.color.r = 1.0;
+            edge_marker.color.g = 0.5;
+            edge_marker.color.b = 0.0;
+        } else if (relation.find("parallel") != std::string::npos) {
+            edge_marker.color.r = 0.5;
+            edge_marker.color.g = 0.5;
+            edge_marker.color.b = 1.0;
+        } else if (relation.find("perpendicular") != std::string::npos) {
+            edge_marker.color.r = 0.5;
+            edge_marker.color.g = 1.0;
+            edge_marker.color.b = 0.5;
+        } else {
+            edge_marker.color.r = 1.0;
+            edge_marker.color.g = 0.0;
+            edge_marker.color.b = 0.0;
+        }
+
+        edge_marker.color.a = 1.0;
+
+        geometry_msgs::msg::Point p1, p2;
+        p1.x = source_pos.x;
+        p1.y = source_pos.y;
+        p1.z = source_pos.z;
+        p2.x = target_pos.x;
+        p2.y = target_pos.y;
+        p2.z = target_pos.z;
+
+        edge_marker.points.push_back(p1);
+        edge_marker.points.push_back(p2);
+        marker_array.markers.push_back(edge_marker);
     }
 
-    edge_marker.color.a = 1.0;
-
-    geometry_msgs::msg::Point p1, p2;
-    p1.x = source_pos.x;
-    p1.y = source_pos.y;
-    p1.z = source_pos.z;
-    p2.x = target_pos.x;
-    p2.y = target_pos.y;
-    p2.z = target_pos.z;
-
-    edge_marker.points.push_back(p1);
-    edge_marker.points.push_back(p2);
-    marker_array.markers.push_back(edge_marker);
-}
     marker_publisher_->publish(marker_array);
 }
+
 }
