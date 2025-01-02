@@ -8,7 +8,7 @@ namespace sg_slam {
 SemanticGraphNode::SemanticGraphNode()
     : Node("semantic_graph_node") {    
     this->declare_parameter<double>("max_radius", 7.0);
-    this->declare_parameter<double>("cluster_radius", 0.6);
+    this->declare_parameter<double>("cluster_radius", 0.8);
     this->declare_parameter<int>("min_points_per_cluster", 15);
     this->declare_parameter<int>("delay", 10);
 

@@ -9,6 +9,7 @@
 #include <Eigen/Core>
 #include <rclcpp/rclcpp.hpp>
 #include <visualization_msgs/msg/marker.hpp>
+#include <Eigen/Eigen>
 
 namespace sg_slam {
 
@@ -62,7 +63,7 @@ Eigen::Matrix3d SemanticGraph::calculateOrientation(const pcl::PointCloud<pcl::P
     Eigen::Vector3d mean = data.colwise().mean();
     Eigen::MatrixXd centered = data.rowwise() - mean.transpose();
     Eigen::Matrix3d covariance = (centered.adjoint() * centered) / double(indices.size() - 1);
-    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(covariance);
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(covariance);
     
     return solver.eigenvectors();
 }
@@ -99,7 +100,7 @@ void SemanticGraph::generateEdges() {
         if (kdtree.radiusSearch(searchPoint, max_connection_distance, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0) {
             for (size_t j = 0; j < pointIdxRadiusSearch.size(); ++j) {
                 if (i == pointIdxRadiusSearch[j]) continue;
-
+            
                 auto vertex1 = vertex_map[i];
                 auto vertex2 = vertex_map[pointIdxRadiusSearch[j]];
 
@@ -107,7 +108,6 @@ void SemanticGraph::generateEdges() {
                 const auto& node2 = graph_[vertex2];
 
                 double distance = std::sqrt(pointRadiusSquaredDistance[j]);
-
                 double max_dimension = std::max({
                     node1.dimensions.width, node1.dimensions.height, node1.dimensions.length,
                     node2.dimensions.width, node2.dimensions.height, node2.dimensions.length
@@ -115,26 +115,28 @@ void SemanticGraph::generateEdges() {
 
                 double dynamic_threshold = std::max(1.0, std::min(max_dimension * scale_factor_base, max_connection_distance));
 
+             
+                auto addRelationshipWithWeight = [&](const std::string& relation_type, double weight_base) {
+                    double weight = weight_base / std::max(distance, 0.1);
+                    addRelationship(vertex1, vertex2, relation_type + " (" + std::to_string(weight) + ")");
+                };
+
                 if (distance < dynamic_threshold) {
-                    double weight = proximity_weight_base / distance;
-                    addRelationship(vertex1, vertex2, "proximity (" + std::to_string(weight) + ")");
+                    addRelationshipWithWeight("proximity", proximity_weight_base);
                 }
 
                 if ((node1.object_type == "Wall" || node1.object_type == "Unknown") &&
                     (node2.object_type == "Wall" || node2.object_type == "Unknown") &&
                     distance < dynamic_threshold * 1.5) {
-                    double weight = adjacent_weight_base / distance;
-                    addRelationship(vertex1, vertex2, "adjacent (" + std::to_string(weight) + ")");
+                    addRelationshipWithWeight("adjacent", adjacent_weight_base);
                 }
 
                 if ((node1.object_type == "Door" && node2.object_type == "Wall") && distance < dynamic_threshold) {
-                    double weight = attached_weight_base / distance;
-                    addRelationship(vertex1, vertex2, "attached (" + std::to_string(weight) + ")");
+                    addRelationshipWithWeight("attached", attached_weight_base);
                 }
 
                 if (std::abs(distance - max_dimension) < 1.0) {
-                    double weight = close_weight_base / distance;
-                    addRelationship(vertex1, vertex2, "close (" + std::to_string(weight) + ")");
+                    addRelationshipWithWeight("close", close_weight_base);
                 }
 
                 Eigen::Vector3d dir1 = Eigen::Vector3d(node1.dimensions.width, node1.dimensions.height, node1.dimensions.length).normalized();
@@ -142,18 +144,17 @@ void SemanticGraph::generateEdges() {
                 double dot_product = dir1.dot(dir2);
 
                 if (std::abs(dot_product - 1.0) < 0.1) {
-                    double weight = parallel_weight_base / distance;
-                    addRelationship(vertex1, vertex2, "parallel (" + std::to_string(weight) + ")");
+                    addRelationshipWithWeight("parallel", parallel_weight_base);
                 }
 
                 if (std::abs(dot_product) < 0.1) {
-                    double weight = perpendicular_weight_base / distance;
-                    addRelationship(vertex1, vertex2, "perpendicular (" + std::to_string(weight) + ")");
+                    addRelationshipWithWeight("perpendicular", perpendicular_weight_base);
                 }
             }
         }
     }
 }
+
 
 double SemanticGraph::calculateDistance(const Eigen::Vector3d& pos1, const Eigen::Vector3d& pos2) const {
     return (pos1 - pos2).norm();
@@ -353,3 +354,4 @@ std::string SemanticGraph::classifyObject(const NodeProperties& cluster) {
 
 sg_slam::ObjectDimensions::ObjectDimensions(double w, double h, double l)
     : width(w), height(h), length(l) {}
+
